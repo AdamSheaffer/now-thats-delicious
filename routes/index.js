@@ -5,6 +5,7 @@ const storeController = require('../controllers/storeController');
 
 router.get('/', catchErrors(storeController.getStores));
 router.get('/stores', catchErrors(storeController.getStores));
+router.get('/store/:slug', catchErrors(storeController.getStoreBySlug));
 router.get('/add', storeController.addStore);
 router.post('/add',
   storeController.upload,
