@@ -12,3 +12,12 @@ exports.logout = (req, res) => {
     req.flash('success', 'You are now logged out!');
     res.redirect('/');
 };
+
+exports.isLoggedIn = (req, res, next) => {
+    if(req.isAuthenticated()) {
+        next();
+    } else {
+        req.flash('error', 'You should log in first to do that!');
+        res.redirect('/login');
+    }
+}
