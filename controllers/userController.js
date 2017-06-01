@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const User = mongoose.model('User');
+const promisify = require('es6-promisify');
 
 exports.loginForm = (req, res) => {
     return res.render('login', { 
@@ -22,8 +24,8 @@ exports.validateRegister = (req, res, next) => {
         gmail_remove_subaddress: false
     });
     req.checkBody('password', 'You must supply a password!').notEmpty();
-    req.checkBody('confirm-password', 'You must supply a password!').notEmpty();
-    req.checkBody('password', 'Passwords do not match').equals(req.body['confirm-password']);
+    req.checkBody('password-confirm', 'You must supply a password!').notEmpty();
+    req.checkBody('password-confirm', 'Passwords do not match').equals(req.body.password);
 
     const errors = req.validationErrors();
     
@@ -37,5 +39,16 @@ exports.validateRegister = (req, res, next) => {
         return;
     }
 
+    next();
+};
+
+exports.register = async (req, res, next) => {
+    const user = new User({
+        email: req.body.email,
+        name: req.body.name
+    });
+
+    const register = promisify(User.register, User);
+    await register(user, req.body.password);
     next();
 };
