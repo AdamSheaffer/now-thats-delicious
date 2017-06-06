@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Store = mongoose.model('Store');
+const User = mongoose.model('User');
 const multer = require('multer');
 const jimp = require('jimp');
 const uuid = require('uuid');
@@ -64,7 +65,7 @@ exports.getStoreBySlug = async (req, res, next) => {
     res.render('store', {
         title: store.name,
         store
-    })
+    });
 }
 
 const confirmOwner = (store, user) => {
@@ -123,4 +124,41 @@ exports.searchStores = async (req, res) => {
     })
     .limit(5);
     res.json(stores);
-}
+};
+
+exports.mapStores = async (req, res) => {
+    const coordinates = [req.query.lng, req.query.lat].map(parseFloat);
+    const q = {
+        location: {
+            $near: {
+                $geometry: {
+                    type: 'Point',
+                    coordinates
+                },
+                $maxDistance: 10000
+            }
+        }
+    }
+
+    const stores = await Store.find(q).select('slug name description location photo').limit(10);
+    res.json(stores);
+};
+
+exports.mapPage = (req, res) => {
+    res.render('map', { title: 'Map' });
+};
+
+exports.heartStore = async (req, res) => {
+    const hearts = req.user.hearts.map(obj => obj.toString());
+    const op = hearts.includes(req.params.storeId) ? '$pull' : '$addToSet';
+    const user = await User.findByIdAndUpdate(req.user._id, { [op]: { hearts: req.params.storeId }}, { new: true });
+    res.json(user);
+};
+
+exports.hearts = async (req, res) => {
+    const user = await User.findById(req.user._id).populate('hearts');
+    res.render('stores', {
+        title: 'Favorites',
+        stores: user.hearts
+    });
+};
