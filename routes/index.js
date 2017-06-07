@@ -4,6 +4,7 @@ const router = express.Router();
 const storeController = require('../controllers/storeController');
 const userController = require('../controllers/userController');
 const authController = require('../controllers/authController');
+const reviewController = require('../controllers/reviewController');
 
 router.get('/', catchErrors(storeController.getStores));
 router.get('/stores', catchErrors(storeController.getStores));
@@ -51,6 +52,12 @@ router.get('/map', storeController.mapPage);
 router.get('/hearts',
   authController.isLoggedIn,
   catchErrors(storeController.hearts));
+
+router.post('/reviews/:storeId',
+  authController.isLoggedIn,
+  catchErrors(reviewController.addReview));
+
+router.get('/top', catchErrors(storeController.getTopStores));
 
 /***** API *****/
 router.get('/api/search', catchErrors(storeController.searchStores));
