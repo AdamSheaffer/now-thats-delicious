@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+
 const Store = mongoose.model('Store');
 const User = mongoose.model('User');
 const multer = require('multer');
@@ -6,168 +7,184 @@ const jimp = require('jimp');
 const uuid = require('uuid');
 
 const multerOptions = {
-    storage: multer.memoryStorage(),
-    fileFilter (req, file, next) {
-        const isPhoto = file.mimetype.startsWith('image/');
-        if(isPhoto) {
-            next(null, true);
-        } else {
-            next({ message: 'That filetype isn\'t allowed' }, false);
-        }
+  storage: multer.memoryStorage(),
+  fileFilter(req, file, next) {
+    const isPhoto = file.mimetype.startsWith('image/');
+    if (isPhoto) {
+      next(null, true);
+    } else {
+      next({ message: 'That filetype isn\'t allowed' }, false);
     }
-}
+  },
+};
 
 exports.homePage = (req, res) => {
-    res.render('index');
+  res.render('index');
 };
 
 exports.addStore = (req, res) => {
-    res.render('editStore', {
-        title: 'Add Store'
-    });
+  res.render('editStore', {
+    title: 'Add Store',
+  });
 };
 
 exports.upload = multer(multerOptions).single('photo');
 
 exports.resize = async (req, res, next) => {
-    if(!req.file) {
-        return next();
-    } else {
-        const extension = req.file.mimetype.split('/')[1];
-        req.body.photo = `${uuid.v4()}.${extension}`;
-        const photo = await jimp.read(req.file.buffer);
-        await photo.resize(800, jimp.AUTO);
-        await photo.write(`./public/uploads/${req.body.photo}`);
-        next();
-    }
+  if (!req.file) {
+    return next();
+  }
+  const extension = req.file.mimetype.split('/')[1];
+  req.body.photo = `${uuid.v4()}.${extension}`;
+  const photo = await jimp.read(req.file.buffer);
+  await photo.resize(800, jimp.AUTO);
+  await photo.write(`./public/uploads/${req.body.photo}`);
+  next();
 };
 
 exports.createStore = async (req, res) => {
-    req.body.author = req.user._id;
-    const store = await (new Store(req.body)).save();
-    await store.save();
-    req.flash('success', `Successfully Created ${store.name}. Care to leave a review?`)
-    res.redirect(`/store/${store.slug}`);
+  req.body.author = req.user._id;
+  const store = await (new Store(req.body)).save();
+  await store.save();
+  req.flash('success', `Successfully Created ${store.name}. Care to leave a review?`);
+  res.redirect(`/store/${store.slug}`);
 };
 
 exports.getStores = async (req, res) => {
-    const stores = await Store.find();
-    res.render('stores', {
-        title: 'Stores',
-        stores
-    });
+  const page = req.params.page || 1;
+  const limit = 6;
+  const skip = (page * limit) - limit;
+  const storesPromise = Store.find().skip(skip).limit(limit).sort({ created: 'desc' });
+  const countPromise = Store.count();
+  const [stores, count] = await Promise.all([storesPromise, countPromise]);
+  const pages = Math.ceil(count / limit);
+
+  if (!stores.length && skip) {
+    req.flash('info', `You asked for page ${page} but that doesn't exist!`);
+    res.redirect(`/stores/page/${pages}`);
+  }
+  res.render('stores', {
+    title: 'Stores',
+    stores,
+    count,
+    page,
+    pages,
+  });
 };
 
 exports.getStoreBySlug = async (req, res, next) => {
-    const store = await Store.findOne({ slug: req.params.slug })
-        .populate('author reviews');
-    if(!store) return next();
+  const store = await Store.findOne({ slug: req.params.slug })
+    .populate('author reviews');
+  if (!store) return next();
 
-    res.render('store', {
-        title: store.name,
-        store
-    });
-}
+  res.render('store', {
+    title: store.name,
+    store,
+  });
+};
 
 const confirmOwner = (store, user) => {
-    if(!user || !store.author.equals(user._id)) {
-        throw Error('You must own a store in order to edit it!');
-    }
-}
+  if (!user || !store.author.equals(user._id)) {
+    throw Error('You must own a store in order to edit it!');
+  }
+};
 
 exports.editStore = async (req, res) => {
-    const store = await Store.findOne({ _id: req.params.id });
-    confirmOwner(store, req.user);
+  const store = await Store.findOne({ _id: req.params.id });
+  confirmOwner(store, req.user);
 
-    res.render('editStore', {
-        title: `Edit ${store.name}`,
-        store
-    });
+  res.render('editStore', {
+    title: `Edit ${store.name}`,
+    store,
+  });
 };
 
 exports.updateStore = async (req, res) => {
-    req.body.location.type = 'Point';
-    const store = await Store.findOneAndUpdate({
-        _id: req.params.id
-    }, req.body, {
-       new: true,
-       runValidators: true
-    }).exec();
-    req.flash('success', `Successfully updated <strong>${store.name}</strong>. <a href="/store/${store.slug}">View Store</a>`);
-    res.redirect(`/stores/${store.id}/edit`);
+  req.body.location.type = 'Point';
+  const store = await Store.findOneAndUpdate({
+    _id: req.params.id,
+  }, req.body, {
+    new: true,
+    runValidators: true,
+  }).exec();
+  req.flash('success', `Successfully updated <strong>${store.name}</strong>. <a href="/store/${store.slug}">View Store</a>`);
+  res.redirect(`/stores/${store.id}/edit`);
 };
 
 exports.getStoresByTag = async (req, res) => {
-    const tagsPromise = Store.getTagsList();
-    const tag = req.params.tag;
-    const tagQuery = tag || { $exists: true };
-    const storesPromise = Store.find({ tags: tagQuery });
-    const [tags, stores] = await Promise.all([tagsPromise, storesPromise]); 
+  const tagsPromise = Store.getTagsList();
+  const tag = req.params.tag;
+  const tagQuery = tag || { $exists: true };
+  const storesPromise = Store.find({ tags: tagQuery });
+  const [tags, stores] = await Promise.all([tagsPromise, storesPromise]);
 
-    res.render('tags', {
-        title: 'Tags',
-        tag,
-        tags,
-        stores
-    });
+  res.render('tags', {
+    title: 'Tags',
+    tag,
+    tags,
+    stores,
+  });
 };
 
 exports.searchStores = async (req, res) => {
-    const stores = await Store.find({
-        $text: {
-            $search: req.query.q
-        }
-    }, {
-        score: { $meta: 'textScore' }
-    })
-    .sort({ 
-        score: { $meta: 'textScore' }
+  const stores = await Store.find({
+    $text: {
+      $search: req.query.q,
+    },
+  }, {
+    score: { $meta: 'textScore' },
+  })
+    .sort({
+      score: { $meta: 'textScore' },
     })
     .limit(5);
-    res.json(stores);
+  res.json(stores);
 };
 
 exports.mapStores = async (req, res) => {
-    const coordinates = [req.query.lng, req.query.lat].map(parseFloat);
-    const q = {
-        location: {
-            $near: {
-                $geometry: {
-                    type: 'Point',
-                    coordinates
-                },
-                $maxDistance: 10000
-            }
-        }
-    }
+  const coordinates = [req.query.lng, req.query.lat].map(parseFloat);
+  const q = {
+    location: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates,
+        },
+        $maxDistance: 10000,
+      },
+    },
+  };
 
-    const stores = await Store.find(q).select('slug name description location photo').limit(10);
-    res.json(stores);
+  const stores = await Store.find(q).select('slug name description location photo').limit(10);
+  res.json(stores);
 };
 
 exports.mapPage = (req, res) => {
-    res.render('map', { title: 'Map' });
+  res.render('map', { title: 'Map' });
 };
 
 exports.heartStore = async (req, res) => {
-    const hearts = req.user.hearts.map(obj => obj.toString());
-    const op = hearts.includes(req.params.storeId) ? '$pull' : '$addToSet';
-    const user = await User.findByIdAndUpdate(req.user._id, { [op]: { hearts: req.params.storeId }}, { new: true });
-    res.json(user);
+  const hearts = req.user.hearts.map(obj => obj.toString());
+  const op = hearts.includes(req.params.storeId) ? '$pull' : '$addToSet';
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    { [op]: { hearts: req.params.storeId } },
+    { new: true });
+  res.json(user);
 };
 
 exports.hearts = async (req, res) => {
-    const user = await User.findById(req.user._id).populate('hearts');
-    res.render('stores', {
-        title: 'Favorites',
-        stores: user.hearts
-    });
+  const user = await User.findById(req.user._id).populate('hearts');
+  res.render('stores', {
+    title: 'Favorites',
+    stores: user.hearts,
+  });
 };
 
 exports.getTopStores = async (req, res) => {
-    const stores = await Store.getTopStores();
-    res.render('topStores', {
-        title: `Top ${stores.length} Stores`,
-        stores
-    });
-}
+  const stores = await Store.getTopStores();
+  res.render('topStores', {
+    title: `Top ${stores.length} Stores`,
+    stores,
+  });
+};
